@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+    <script src="http://js.api.here.com/v3/3.0/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+    <script src="http://js.api.here.com/v3/3.0/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+    <script src="http://js.api.here.com/v3/3.0/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+    <script src="http://js.api.here.com/v3/3.0/mapsjs-places.js" type="text/javascript" charset="utf-8"></script>
+
+    <link rel="stylesheet" type="text/css" href="http://js.api.here.com/v3/3.0/mapsjs-ui.css" />
+    <title>here地圖</title>
+</head>
+
+<body>
+    <div style="display:flex;">
+        <div id="map" style="width: 1080px;height:700px;"></div>
+        <div style="background: #ddd;flex-grow:1">
+            <div style="margin: 15px;">
+                <h2>搜尋地址:</h2>
+                <input type="text" id="text" placeholder="請輸入地址">
+                <button onclick="query()">搜尋</button>
+            </div>
+            <div style="margin: 15px;">
+                <h2>搜尋目標附近的餐廳:</h2>
+                結果:<select name="" id="reuslts" style="margin:0 10px;width: 200px;height:25px;"
+                    onchange="moveToValue()">
+
+                </select>
+                <button onclick="searchPlace()">搜尋</button>
+            </div>
+            <div style="margin: 15px;">
+                <h2>規劃目標點與目標餐廳的路線:</h2>
+                <button id="route" style="width: 250px;height:30px;">開始規劃</button>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+        var platform = new H.service.Platform({
+            'app_id': 'NYdKFKNKtPfDRIMKleqP',
+            'app_code': 'l9ar0CqVHDKBi6fqsz_Tkg'
+        });
+
+        var maptypes = platform.createDefaultLayers();
+
+        var map = new H.Map(
+            document.getElementById('map'),
+            maptypes.normal.map, {
+                zoom: 7,
+                center: {
+                    lng: 121,
+                    lat: 23.4
+                }
+            });
+
+        var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+        var ui = H.ui.UI.createDefault(map, maptypes, 'zh-CN');
+        var marker,
+            position,
+            select = document.getElementById('reuslts'),
+            index,
+            optionvalue,
+            polyline,
+            value,
+            value1 = [];
+
+
+        function query() {
+            if (marker != undefined) {
+                map.removeObject(marker);
+            }
+            if (polyline != undefined) {
+                map.removeObject(polyline);
+            }
+            var geocodingParams = {
+                searchText: document.getElementById('text').value
+            };
+            var onResult = function (result) {
+                var locations = result.Response.View[0].Result
+                // Add a marker for each location found
+                position = {
+                    lat: locations[0].Location.DisplayPosition.Latitude,
+                    lng: locations[0].Location.DisplayPosition.Longitude
+                };
+                marker = new H.map.Marker(position);
+                map.addObject(marker);
+                map.setCenter({
+                    lat: position.lat,
+                    lng: position.lng
+                });
+                map.setZoom(13);
+
+            };
+            var geocoder = platform.getGeocodingService();
+
+            geocoder.geocode(geocodingParams, onResult, function (e) {
+                alert(e);
+            });
+        }
+
+        map.addEventListener('tap', function (evn) {
+            if (marker != undefined) {
+                map.removeObject(marker);
+            }
+            var coord = map.screenToGeo(evn.currentPointer.viewportX, evn.currentPointer.viewportY);
+            marker = new H.map.Marker({
+                lat: coord.lat,
+                lng: coord.lng
+            })
+            position = {
+                lat: coord.lat,
+                lng: coord.lng
+            };
+
+            map.addObject(marker);
+        })
+
+        function searchPlace() {
+            var search = new H.places.Search(platform.getPlacesService()),
+                error;
+
+            var params = {
+                'q': 'restuarant',
+                'at': position.lat + ',' + position.lng
+            };
+
+
+            function onResult(data) {
+                var text = "";
+                if (value1 != undefined) {
+                    map.removeObjects(value1);
+                }
+                if (polyline != undefined) {
+                    map.removeObject(polyline);
+                }
+                var searchResult = data.results.items;
+                for (var i = 0; i < searchResult.length; i++) {
+                    value = new H.map.Marker({
+                        lat: searchResult[i].position[0],
+                        lng: searchResult[i].position[1]
+                    }, {
+                        icon: new H.map.Icon(searchResult[i].icon)
+                    })
+                    value.setData({
+                        "id": i,
+                        "title": searchResult[i].title,
+                        "distance": searchResult[i].distance
+                    })
+                    map.addObject(value)
+                    value1.push(value);
+                    var items = data.results.items[i]
+                    text += "<option value='" + items.position + "'>" + items.title + "</option>"
+                };
+                document.getElementById('reuslts').innerHTML = text;
+                moveToValue();
+            }
+
+            function onError(data) {
+                error = data;
+                console.log('error', error);
+            }
+
+            search.request(params, {}, onResult, onError)
+
+        }
+
+
+
+        function moveToValue() {
+            index = select.selectedIndex;
+            optionvalue = select.options[index].value;
+
+            var lat = optionvalue.split(',')[0];
+            var lng = optionvalue.split(',')[1];
+
+            map.setCenter({
+                lat: lat,
+                lng: lng
+            });
+            map.setZoom(25);
+
+        }
+
+
+        function calculateRouteFromAtoB(platform) {
+
+            var router = platform.getRoutingService(),
+                routeRequestParams = {
+                    mode: 'fastest;car',
+                    representation: 'display',
+                    routeattributes: 'waypoints,summary,shape,legs',
+                    maneuverattributes: 'direction,action',
+                    waypoint0: optionvalue,
+                    waypoint1: position.lat + ',' + position.lng
+                };
+
+
+            router.calculateRoute(
+                routeRequestParams,
+                onSuccess,
+                onError
+            );
+        }
+
+        function onSuccess(result) {
+            var route = result.response.route[0];
+            addRouteShapeToMap(route);
+        }
+
+        function onError(error) {
+            alert('Can\'t reach the remote server');
+        }
+
+
+        function addRouteShapeToMap(route) {
+            if (polyline != undefined) {
+                map.removeObject(polyline);
+            }
+            var lineString = new H.geo.LineString(),
+                routeShape = route.shape;
+
+
+            routeShape.forEach(function (point) {
+                var parts = point.split(',');
+                lineString.pushLatLngAlt(parts[0], parts[1]);
+            });
+
+            polyline = new H.map.Polyline(lineString, {
+                style: {
+                    lineWidth: 4,
+                    strokeColor: 'rgba(0, 128, 255, 0.7)'
+                }
+            });
+            // Add the polyline to the map
+            map.addObject(polyline);
+            // And zoom to its bounding rectangle
+            map.setViewBounds(polyline.getBounds(), true);
+        }
+
+        document.getElementById('route').onclick = function () {
+            calculateRouteFromAtoB(platform);
+        }
+    </script>
+</body>
+
+</html>
